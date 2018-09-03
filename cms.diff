@@ -1,0 +1,94 @@
+--- prev/cms.c	2015-03-19 23:37:10.000000000 +1000
++++ apps/cms.c	2018-07-10 22:21:45.278539473 +1000
+@@ -99,6 +99,7 @@
+ int verify_err = 0;
+ 
+ int MAIN(int, char **);
++static X509_CRL *load_crl(char *infile, int format);
+ 
+ int MAIN(int argc, char **argv)
+ {
+@@ -111,6 +112,7 @@
+     char *signerfile = NULL, *recipfile = NULL;
+     STACK_OF(OPENSSL_STRING) *sksigners = NULL, *skkeys = NULL;
+     char *certfile = NULL, *keyfile = NULL, *contfile = NULL;
++    char *crlfile = NULL;
+     char *certsoutfile = NULL;
+     const EVP_CIPHER *cipher = NULL;
+     CMS_ContentInfo *cms = NULL, *rcms = NULL;
+@@ -421,6 +423,10 @@
+             if (!args[1])
+                 goto argerr;
+             certfile = *++args;
++        } else if (!strcmp(*args, "-CRLfile")) {
++            if (!args[1])
++                goto argerr;
++            crlfile = *++args;
+         } else if (!strcmp(*args, "-CAfile")) {
+             if (!args[1])
+                 goto argerr;
+@@ -854,7 +860,6 @@
+          * format.
+          */
+         if (operation == SMIME_SIGN) {
+-
+             if (flags & CMS_DETACHED) {
+                 if (outformat == FORMAT_SMIME)
+                     flags |= CMS_STREAM;
+@@ -874,6 +879,13 @@
+                     goto end;
+                 }
+             }
++            if (crlfile) {
++                X509_CRL *crl = load_crl(crlfile, FORMAT_PEM);
++                if (!crl) {
++                    exit(1);
++                }
++                CMS_add1_crl(cms, crl);
++            }
+         } else
+             flags |= CMS_REUSE_DIGEST;
+         for (i = 0; i < sk_OPENSSL_STRING_num(sksigners); i++) {
+@@ -1218,4 +1230,42 @@
+     return NULL;
+ }
+ 
++static X509_CRL *load_crl(char *infile, int format)
++{
++    X509_CRL *x = NULL;
++    BIO *in = NULL;
++
++    in = BIO_new(BIO_s_file());
++    if (in == NULL) {
++        ERR_print_errors(bio_err);
++        goto end;
++    }
++
++    if (infile == NULL)
++        BIO_set_fp(in, stdin, BIO_NOCLOSE);
++    else {
++        if (BIO_read_filename(in, infile) <= 0) {
++            perror(infile);
++            goto end;
++        }
++    }
++    if (format == FORMAT_ASN1)
++        x = d2i_X509_CRL_bio(in, NULL);
++    else if (format == FORMAT_PEM)
++        x = PEM_read_bio_X509_CRL(in, NULL, NULL, NULL);
++    else {
++        BIO_printf(bio_err, "bad input format specified for input crl\n");
++        goto end;
++    }
++    if (x == NULL) {
++        BIO_printf(bio_err, "unable to load CRL\n");
++        ERR_print_errors(bio_err);
++        goto end;
++    }
++
++ end:
++    BIO_free(in);
++    return (x);
++}
++
+ #endif

@@ -1,0 +1,26 @@
+#!/usr/bin/perl
+
+use warnings;
+use strict;
+
+use APNIC::RPKI::Publication::Proxy::Server;
+
+sub usage
+{
+    print <<EOF;
+Usage: $0 {hostname} {port} {handle} {dbpath}
+EOF
+    exit 10;
+}
+
+my $server =
+    APNIC::RPKI::Publication::Proxy::Server->new(
+        hostname => $ARGV[0],
+        port     => $ARGV[1],
+        handle   => $ARGV[2],
+        dbpath   => $ARGV[3],
+    );
+print "Running on ".$server->{'hostname'}.':'.$server->{'port'}." (".$server->{'dbpath'}.")...\n";
+$server->run();
+
+1;
