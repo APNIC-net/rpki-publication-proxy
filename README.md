@@ -77,4 +77,4 @@ publication requests, for audit purposes or similar.
 
 ### License
 
-See [LICENSE.txt](./LICENSE.txt).
+See [LICENSE](./LICENSE).
