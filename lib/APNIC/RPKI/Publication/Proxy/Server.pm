@@ -466,20 +466,20 @@ sub run
             my $res;
             eval {
                 if ($method eq 'POST') {
-                    if ($path eq '/bpki-init') {
+                    if ($path eq '/admin/bpki-init') {
                         $res = $self->_bpki_init_post($c, $r);
-                    } elsif ($path eq '/bpki-cycle') {
+                    } elsif ($path eq '/admin/bpki-cycle') {
                         $res = $self->_bpki_cycle_post($c, $r);
-                    } elsif ($path eq '/repository') {
+                    } elsif ($path eq '/admin/repository') {
                         $res = $self->_repository_post($c, $r);
-                    } elsif ($path eq '/client') {
+                    } elsif ($path eq '/admin/client') {
                         $res = $self->_client_post($c, $r);
                     } elsif ($path =~ /^\/publication\/(.*)$/) {
                         my $handle = $1;
                         $res = $self->_publication_post($c, $r, $handle);
                     }
                 } elsif ($method eq 'GET') {
-                    if ($path eq '/publisher') {
+                    if ($path eq '/admin/publisher') {
                         $res = $self->_publisher_get($c, $r);
                     }
                 }

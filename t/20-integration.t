@@ -50,40 +50,42 @@ sub exit_test
     waitpid $publication_pid, 0;
 }
 
-my $host             = '127.0.0.1';
-my $proxy_base       = "http://$host:8080";
-my $publication_base = "http://$host:8081";
+my $host                   = '127.0.0.1';
+my $proxy_base             = "http://$host:8080";
+my $publication_base       = "http://$host:8081";
+my $proxy_base_admin       = "http://$host:8080/admin";
+my $publication_base_admin = "http://$host:8081/admin";
 
 {
     my $ua = LWP::UserAgent->new();
 
-    my $req = HTTP::Request->new(POST => "$proxy_base/bpki-init");
+    my $req = HTTP::Request->new(POST => "$proxy_base_admin/bpki-init");
     my $res = $ua->request($req);
     ok($res->is_success(), 'Created CA successfully');
 
-    $req = HTTP::Request->new(POST => "$proxy_base/bpki-cycle");
+    $req = HTTP::Request->new(POST => "$proxy_base_admin/bpki-cycle");
     $res = $ua->request($req);
     ok($res->is_success(), 'Created EE certificate successfully');
 
-    $req = HTTP::Request->new(GET => "$proxy_base/publisher");
+    $req = HTTP::Request->new(GET => "$proxy_base_admin/publisher");
     $res = $ua->request($req);
     ok($res->is_success(), 'Got publication request');
     my $pub_request = $res->content();
 
-    $req = HTTP::Request->new(POST => "$publication_base/ca");
+    $req = HTTP::Request->new(POST => "$publication_base_admin/ca");
     $res = $ua->request($req);
     ok($res->is_success(), 'Created publication CA successfully');
 
-    $req = HTTP::Request->new(POST => "$publication_base/ee");
+    $req = HTTP::Request->new(POST => "$publication_base_admin/ee");
     $res = $ua->request($req);
     ok($res->is_success(), 'Created publication EE certificate successfully');
 
-    $req = HTTP::Request->new(POST => "$publication_base/client",
+    $req = HTTP::Request->new(POST => "$publication_base_admin/client",
                               [], $pub_request);
     $res = $ua->request($req);
     ok($res->is_success(), 'Registered with publication server');
 
-    $req = HTTP::Request->new(POST => "$proxy_base/repository",
+    $req = HTTP::Request->new(POST => "$proxy_base_admin/repository",
                               [ 'Content-Type' => 'application/xml' ],
                               $res->content());
     $res = $ua->request($req);
@@ -113,7 +115,7 @@ my $publication_base = "http://$host:8081";
    </publisher_request>
 EOF
 
-    $req = HTTP::Request->new(POST => "$proxy_base/client",
+    $req = HTTP::Request->new(POST => "$proxy_base_admin/client",
                               [ 'Content-Type' => 'application/xml' ],
                               $client_request);
     $res = $ua->request($req);

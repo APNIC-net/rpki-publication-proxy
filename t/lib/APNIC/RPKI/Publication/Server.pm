@@ -275,11 +275,11 @@ sub run
             my $res;
             eval {
                 if ($method eq 'POST') {
-                    if ($path eq '/ca') {
+                    if ($path eq '/admin/ca') {
                         $res = $self->_ca_post($c, $r);
-                    } elsif ($path eq '/ee') {
+                    } elsif ($path eq '/admin/ee') {
                         $res = $self->_ee_post($c, $r);
-                    } elsif ($path eq '/client') {
+                    } elsif ($path eq '/admin/client') {
                         $res = $self->_client_post($c, $r);
                     } elsif ($path =~ /^\/publication\/(.*)$/) {
                         my $handle = $1;
