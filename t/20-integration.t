@@ -15,7 +15,7 @@ use APNIC::RPKI::Publication::Utils qw(canonicalise_pem);
 use lib 't/lib';
 use APNIC::RPKI::Publication::Server;
 
-use Test::More tests => 16;
+use Test::More tests => 18;
 
 my $DEBUG = 0;
 my $shutdown = 1;
@@ -149,8 +149,12 @@ EOF
                                     'application/rpki-publication' ],
                               $xml_list_query);
     $res = $ua->request($req);
-    is($res->code(), HTTP_BAD_REQUEST,
-        'Got "bad request" on invalid query');
+    is($res->code(), HTTP_OK,
+        'Got HTTP OK on invalid query (CMS-wrapped)');
+    my $xml_error_response =
+        $openssl->verify_cms($res->content(), $repo_ta);
+    like($xml_error_response, qr/error_code="bad_cms_signature"/,
+        'Got correct error code');
 
     my $cms_list_query = $ca->sign_cms($xml_list_query);
     $req = HTTP::Request->new(POST => "$proxy_base/publication/Bob",
@@ -180,8 +184,12 @@ EOF
                                     'application/rpki-publication' ],
                               $cms_publish_query);
     $res = $ua->request($req);
-    ok((not $res->is_success()),
-        'Unable to publish object outside of handle directory');
+    is($res->code(), HTTP_OK,
+        'Got HTTP OK on attempting to publish outside of handle directory');
+    $xml_error_response =
+        $openssl->verify_cms($res->content(), $repo_ta);
+    like($xml_error_response, qr/error_code="permission_failure"/,
+        'Got correct error code');
 
     $xml_publish_query = <<EOF;
    <msg

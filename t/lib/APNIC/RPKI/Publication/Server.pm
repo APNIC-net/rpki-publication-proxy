@@ -109,7 +109,7 @@ sub _error
                    "</problem>";
         $response->content($data);
     }
-    $response->header("Content-Type" => ($ct || "application/problem+xml"));
+    $response->header("Content-Type" => ($ct || "application/xml"));
 
     return $response;
 }

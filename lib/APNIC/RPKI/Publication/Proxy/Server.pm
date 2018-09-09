@@ -132,7 +132,30 @@ sub _error
                    "</problem>";
         $response->content($data);
     }
-    $response->header("Content-Type" => ($ct || "application/problem+xml"));
+    $response->header("Content-Type" => ($ct || "application/xml"));
+
+    return $response;
+}
+
+sub _error_cms
+{
+    my ($self, $error_code, $ct) = @_;
+
+    my $response = HTTP::Response->new();
+    $response->code(HTTP_OK);
+
+    my $xml_response_data = <<EOF;
+<msg type="reply"
+     version="3"
+     xmlns="http://www.hactrn.net/uris/rpki/publication-spec/">
+    <report_error error_code="$error_code" />
+</msg>
+EOF
+
+    my $ca = $self->{'ca'};
+    my $cms_response_data = $ca->sign_cms($xml_response_data);
+    $response->header("Content-Type" => ($ct || "application/xml"));
+    $response->content($cms_response_data);
 
     return $response;
 }
@@ -287,7 +310,7 @@ EOF
 
 sub _validate_publication_request
 {
-    my ($self, $handle, $ct, $content) = @_; 
+    my ($self, $handle, $ct, $content) = @_;
 
     my $publication_doc =
         XML::LibXML->load_xml(string => $content,
@@ -304,13 +327,13 @@ sub _validate_publication_request
         if ($uri !~ $sia_base) {
             $self->_log("Client ($handle) attempting publication ".
                         "for unauthorised URL ($uri)");
-            return $self->_error(HTTP_BAD_REQUEST, undef, undef, $ct);
+            return $self->_error_cms("permission_failure", $ct);
         }
         my ($rest) = ($uri =~ /^$sia_base(.*)/);
         if ($rest =~ /\//) {
             $self->_log("Client ($handle) attempting publication ".
                         "for unauthorised URL ($uri)");
-            return $self->_error(HTTP_BAD_REQUEST, undef, undef, $ct);
+            return $self->_error_cms("permission_failure", $ct);
         }
     }
 
@@ -382,7 +405,7 @@ sub _publication_post
         $self->_log("Unable to verify CMS from client: ".
                     encode_base64($cms_client_request).", ".
                     $error);
-        return $self->_error(HTTP_BAD_REQUEST, undef, undef, $ct);
+        return $self->_error_cms("bad_cms_signature", $ct);
     }
 
     my $error = $self->_validate_publication_request($handle, $ct,
@@ -405,8 +428,7 @@ sub _publication_post
     if (not $http_response->is_success()) {
         $self->_log("Publication to parent repository failed: ".
                     Dumper($http_response));
-        return $self->_error($http_response->code(), 'Error',
-                             'Unable to publish to parent repository');
+        return $self->_error_cms("other_error", $ct);
     }
 
     my $parent_bpki_ta_cert =
@@ -422,9 +444,7 @@ sub _publication_post
         $self->_log("Unable to decode response from parent repository: ".
                     encode_base64($cms_parent_response).", ".
                     $error);
-        return $self->_error(HTTP_INTERNAL_SERVER_ERROR,
-                             'Error', 'Error decoding parent response',
-                             $ct);
+        return $self->_error_cms("other_error", $ct);
     }
 
     $self->_log("Publication protocol response (unadjusted): ".
