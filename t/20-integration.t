@@ -15,7 +15,7 @@ use APNIC::RPKI::Publication::Utils qw(canonicalise_pem);
 use lib 't/lib';
 use APNIC::RPKI::Publication::Server;
 
-use Test::More tests => 18;
+use Test::More tests => 16;
 
 my $DEBUG = 0;
 my $shutdown = 1;
@@ -40,6 +40,14 @@ if (not $publication_pid) {
             ($DEBUG ? () : (log_path => $log_path->filename()))
         );
     $server->run();
+}
+
+sub exit_test
+{
+    kill 'TERM', $proxy_pid;
+    kill 'TERM', $publication_pid;
+    waitpid $proxy_pid, 0;
+    waitpid $publication_pid, 0;
 }
 
 my $host             = '127.0.0.1';
@@ -208,23 +216,18 @@ EOF
     like($xml_list_response, qr!<msg.*<list hash=".*?" uri="rsync://$host/rpki-pp/Bob/object.cer"/></msg>!,
         'Got correct list response');
 
-    $req = HTTP::Request->new(POST => "$proxy_base/shutdown");
-    $res = $ua->request($req);
-    ok($res->is_success(), 'Proxy server shut down successfully');
+    kill 'TERM', $proxy_pid;
+    kill 'TERM', $publication_pid;
+    waitpid $proxy_pid, 0;
+    waitpid $publication_pid, 0;
 
-    $req = HTTP::Request->new(POST => "$publication_base/shutdown");
-    $res = $ua->request($req);
-    ok($res->is_success(), 'Publication server shut down successfully');
-
+    exit_test();
     $shutdown = 0;
 }
 
 END {
     if ($shutdown) {
-        kill 'TERM', $proxy_pid;
-        kill 'TERM', $publication_pid;
-        waitpid $proxy_pid, 0;
-        waitpid $publication_pid, 0;
+        exit_test();
     }
     exit 0;
 }

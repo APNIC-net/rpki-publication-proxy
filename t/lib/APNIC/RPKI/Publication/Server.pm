@@ -263,6 +263,8 @@ sub run
 {
     my ($self) = @_;
 
+    $SIG{'TERM'} = sub { exit(0); };
+
     my $daemon = $self->{"daemon"};
     while (my $c = $daemon->accept()) {
         while (my $r = $c->get_request()) {
@@ -279,9 +281,6 @@ sub run
                         $res = $self->_ee_post($c, $r);
                     } elsif ($path eq '/client') {
                         $res = $self->_client_post($c, $r);
-                    } elsif ($path eq '/shutdown') {
-                        $c->send_response(HTTP_OK);
-                        exit(0);
                     } elsif ($path =~ /^\/publication\/(.*)$/) {
                         my $handle = $1;
                         $res = $self->_publication_post($c, $r, $handle);
