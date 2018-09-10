@@ -33,7 +33,8 @@ publication requests, for audit purposes or similar.
  - `POST /admin/bpki-init`
     - Takes no parameters.  Sets up a local BPKI CA and EE certificate
       for the proxy to use.  This must be run manually when the proxy
-      is being initialised.
+      is initialised: the proxy will respond with HTTP errors to all
+      other types of request until this has happened.
 
  - `POST /admin/bpki-cycle`
     - Takes no parameters.  Revokes the previous EE certificate,
@@ -46,8 +47,6 @@ publication requests, for audit purposes or similar.
       ([section 5.2.3 of RFC 8183](https://tools.ietf.org/html/rfc8183#section-5.2.3)) for this publication proxy.
       This XML should be passed to the upstream publication point, which
       will return repository response XML ([section 5.2.4 of RFC 8183](https://tools.ietf.org/html/rfc8183#section-5.2.4)).
-      The way in which the publication request XML is passed upstream
-      is specific to the publication point.
 
  - `POST /admin/repository`
     - Takes as POST data the repository response XML ([section 5.2.4 of RFC 8183](https://tools.ietf.org/html/rfc8183#section-5.2.4))
