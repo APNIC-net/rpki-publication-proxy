@@ -107,21 +107,21 @@ sub _get_sia_base
 
 sub _success
 {
-    my ($self, $code, $data, $ct) = @_;
+    my ($self, $code, $data, $content_type) = @_;
 
     my $response = HTTP::Response->new();
     $response->code($code);
     if ($data) {
         $response->content($data);
     }
-    $response->header("Content-Type" => ($ct || CONTENT_TYPE()));
+    $response->header("Content-Type" => ($content_type || CONTENT_TYPE()));
 
     return $response;
 }
 
 sub _error
 {
-    my ($self, $code, $title, $detail, $ct) = @_;
+    my ($self, $code, $title, $detail, $content_type) = @_;
 
     my $response = HTTP::Response->new();
     $response->code($code);
@@ -132,14 +132,14 @@ sub _error
                    "</problem>";
         $response->content($data);
     }
-    $response->header("Content-Type" => ($ct || "application/xml"));
+    $response->header("Content-Type" => ($content_type || "application/xml"));
 
     return $response;
 }
 
 sub _error_cms
 {
-    my ($self, $error_code, $ct) = @_;
+    my ($self, $error_code, $content_type) = @_;
 
     my $response = HTTP::Response->new();
     $response->code(HTTP_OK);
@@ -154,7 +154,7 @@ EOF
 
     my $ca = $self->{'ca'};
     my $cms_response_data = $ca->sign_cms($xml_response_data);
-    $response->header("Content-Type" => ($ct || "application/xml"));
+    $response->header("Content-Type" => ($content_type || "application/xml"));
     $response->content($cms_response_data);
 
     return $response;
@@ -310,7 +310,7 @@ EOF
 
 sub _validate_publication_request
 {
-    my ($self, $handle, $ct, $content) = @_;
+    my ($self, $handle, $content_type, $content) = @_;
 
     my $publication_doc =
         XML::LibXML->load_xml(string => $content,
@@ -327,13 +327,13 @@ sub _validate_publication_request
         if ($uri !~ $sia_base) {
             $self->_log("Client ($handle) attempting publication ".
                         "for unauthorised URL ($uri)");
-            return $self->_error_cms("permission_failure", $ct);
+            return $self->_error_cms("permission_failure", $content_type);
         }
         my ($rest) = ($uri =~ /^$sia_base(.*)/);
         if ($rest =~ /\//) {
             $self->_log("Client ($handle) attempting publication ".
                         "for unauthorised URL ($uri)");
-            return $self->_error_cms("permission_failure", $ct);
+            return $self->_error_cms("permission_failure", $content_type);
         }
     }
 
@@ -381,11 +381,11 @@ sub _publication_post
                              "BPKI must be initialised before publishing.");
     }
 
-    my $ct = $r->header('Content-Type');
+    my $content_type = $r->header('Content-Type');
 
     my $client_bpki_ta = $self->{'clients'}->{$handle};
     if (not $client_bpki_ta) {
-        return $self->_error(HTTP_NOT_FOUND, undef, undef, $ct);
+        return $self->_error(HTTP_NOT_FOUND, undef, undef, $content_type);
     }
     my $client_bpki_ta_cert =
         '-----BEGIN X509 CERTIFICATE-----'."\n".
@@ -405,10 +405,10 @@ sub _publication_post
         $self->_log("Unable to verify CMS from client: ".
                     encode_base64($cms_client_request).", ".
                     $error);
-        return $self->_error_cms("bad_cms_signature", $ct);
+        return $self->_error_cms("bad_cms_signature", $content_type);
     }
 
-    my $error = $self->_validate_publication_request($handle, $ct,
+    my $error = $self->_validate_publication_request($handle, $content_type,
                                                      $xml_client_request);
     if ($error) {
         return $error;
@@ -428,7 +428,7 @@ sub _publication_post
     if (not $http_response->is_success()) {
         $self->_log("Publication to parent repository failed: ".
                     Dumper($http_response));
-        return $self->_error_cms("other_error", $ct);
+        return $self->_error_cms("other_error", $content_type);
     }
 
     my $parent_bpki_ta_cert =
@@ -444,7 +444,7 @@ sub _publication_post
         $self->_log("Unable to decode response from parent repository: ".
                     encode_base64($cms_parent_response).", ".
                     $error);
-        return $self->_error_cms("other_error", $ct);
+        return $self->_error_cms("other_error", $content_type);
     }
 
     $self->_log("Publication protocol response (unadjusted): ".
@@ -458,7 +458,7 @@ sub _publication_post
     my $cms_client_response =
         $self->{'ca'}->sign_cms($xml_client_response);
 
-    return $self->_success(HTTP_OK, $cms_client_response, $ct);
+    return $self->_success(HTTP_OK, $cms_client_response, $content_type);
 }
 
 sub _save
