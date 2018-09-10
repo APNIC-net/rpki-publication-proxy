@@ -107,21 +107,21 @@ sub _get_sia_base
 
 sub _success
 {
-    my ($self, $code, $data, $ct) = @_;
+    my ($self, $code, $data, $content_type) = @_;
 
     my $response = HTTP::Response->new();
     $response->code($code);
     if ($data) {
         $response->content($data);
     }
-    $response->header("Content-Type" => ($ct || CONTENT_TYPE()));
+    $response->header("Content-Type" => ($content_type || CONTENT_TYPE()));
 
     return $response;
 }
 
 sub _error
 {
-    my ($self, $code, $title, $detail, $ct) = @_;
+    my ($self, $code, $title, $detail, $content_type) = @_;
 
     my $response = HTTP::Response->new();
     $response->code($code);
@@ -132,7 +132,30 @@ sub _error
                    "</problem>";
         $response->content($data);
     }
-    $response->header("Content-Type" => ($ct || "application/problem+xml"));
+    $response->header("Content-Type" => ($content_type || "application/xml"));
+
+    return $response;
+}
+
+sub _error_cms
+{
+    my ($self, $error_code, $content_type) = @_;
+
+    my $response = HTTP::Response->new();
+    $response->code(HTTP_OK);
+
+    my $xml_response_data = <<EOF;
+<msg type="reply"
+     version="3"
+     xmlns="http://www.hactrn.net/uris/rpki/publication-spec/">
+    <report_error error_code="$error_code" />
+</msg>
+EOF
+
+    my $ca = $self->{'ca'};
+    my $cms_response_data = $ca->sign_cms($xml_response_data);
+    $response->header("Content-Type" => ($content_type || "application/xml"));
+    $response->content($cms_response_data);
 
     return $response;
 }
@@ -287,7 +310,7 @@ EOF
 
 sub _validate_publication_request
 {
-    my ($self, $handle, $ct, $content) = @_; 
+    my ($self, $handle, $content_type, $content) = @_;
 
     my $publication_doc =
         XML::LibXML->load_xml(string => $content,
@@ -304,13 +327,13 @@ sub _validate_publication_request
         if ($uri !~ $sia_base) {
             $self->_log("Client ($handle) attempting publication ".
                         "for unauthorised URL ($uri)");
-            return $self->_error(HTTP_BAD_REQUEST, undef, undef, $ct);
+            return $self->_error_cms("permission_failure", $content_type);
         }
         my ($rest) = ($uri =~ /^$sia_base(.*)/);
         if ($rest =~ /\//) {
             $self->_log("Client ($handle) attempting publication ".
                         "for unauthorised URL ($uri)");
-            return $self->_error(HTTP_BAD_REQUEST, undef, undef, $ct);
+            return $self->_error_cms("permission_failure", $content_type);
         }
     }
 
@@ -358,11 +381,11 @@ sub _publication_post
                              "BPKI must be initialised before publishing.");
     }
 
-    my $ct = $r->header('Content-Type');
+    my $content_type = $r->header('Content-Type');
 
     my $client_bpki_ta = $self->{'clients'}->{$handle};
     if (not $client_bpki_ta) {
-        return $self->_error(HTTP_NOT_FOUND, undef, undef, $ct);
+        return $self->_error(HTTP_NOT_FOUND, undef, undef, $content_type);
     }
     my $client_bpki_ta_cert =
         '-----BEGIN X509 CERTIFICATE-----'."\n".
@@ -382,10 +405,10 @@ sub _publication_post
         $self->_log("Unable to verify CMS from client: ".
                     encode_base64($cms_client_request).", ".
                     $error);
-        return $self->_error(HTTP_BAD_REQUEST, undef, undef, $ct);
+        return $self->_error_cms("bad_cms_signature", $content_type);
     }
 
-    my $error = $self->_validate_publication_request($handle, $ct,
+    my $error = $self->_validate_publication_request($handle, $content_type,
                                                      $xml_client_request);
     if ($error) {
         return $error;
@@ -405,8 +428,7 @@ sub _publication_post
     if (not $http_response->is_success()) {
         $self->_log("Publication to parent repository failed: ".
                     Dumper($http_response));
-        return $self->_error($http_response->code(), 'Error',
-                             'Unable to publish to parent repository');
+        return $self->_error_cms("other_error", $content_type);
     }
 
     my $parent_bpki_ta_cert =
@@ -422,9 +444,7 @@ sub _publication_post
         $self->_log("Unable to decode response from parent repository: ".
                     encode_base64($cms_parent_response).", ".
                     $error);
-        return $self->_error(HTTP_INTERNAL_SERVER_ERROR,
-                             'Error', 'Error decoding parent response',
-                             $ct);
+        return $self->_error_cms("other_error", $content_type);
     }
 
     $self->_log("Publication protocol response (unadjusted): ".
@@ -438,7 +458,7 @@ sub _publication_post
     my $cms_client_response =
         $self->{'ca'}->sign_cms($xml_client_response);
 
-    return $self->_success(HTTP_OK, $cms_client_response, $ct);
+    return $self->_success(HTTP_OK, $cms_client_response, $content_type);
 }
 
 sub _save
@@ -454,6 +474,8 @@ sub run
 {
     my ($self) = @_;
 
+    $SIG{'TERM'} = sub { exit(0); };
+
     my $d = $self->{'daemon'};
     while (my $c = $d->accept()) {
         while (my $r = $c->get_request()) {
@@ -464,23 +486,20 @@ sub run
             my $res;
             eval {
                 if ($method eq 'POST') {
-                    if ($path eq '/bpki-init') {
+                    if ($path eq '/admin/bpki-init') {
                         $res = $self->_bpki_init_post($c, $r);
-                    } elsif ($path eq '/bpki-cycle') {
+                    } elsif ($path eq '/admin/bpki-cycle') {
                         $res = $self->_bpki_cycle_post($c, $r);
-                    } elsif ($path eq '/repository') {
+                    } elsif ($path eq '/admin/repository') {
                         $res = $self->_repository_post($c, $r);
-                    } elsif ($path eq '/client') {
+                    } elsif ($path eq '/admin/client') {
                         $res = $self->_client_post($c, $r);
-                    } elsif ($path eq '/shutdown') {
-                        $c->send_response(HTTP_OK);
-                        exit(0);
                     } elsif ($path =~ /^\/publication\/(.*)$/) {
                         my $handle = $1;
                         $res = $self->_publication_post($c, $r, $handle);
                     }
                 } elsif ($method eq 'GET') {
-                    if ($path eq '/publisher') {
+                    if ($path eq '/admin/publisher') {
                         $res = $self->_publisher_get($c, $r);
                     }
                 }

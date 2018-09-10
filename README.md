@@ -14,10 +14,13 @@ publication requests, for audit purposes or similar.
 
  - HOSTNAME: the hostname on which the proxy will be accessible to its
    clients (defaults to 'rpki-pp').
+
  - PORT: the port to use for the server (defaults to 8080).
+
  - HANDLE: a string identifying the publication proxy, used in the
    BPKI CA subject name and as the handle in the publication request
    issued by the proxy (defaults to 'rpki-pp').
+
  - DBPATH: the path to the proxy's database directory.  If not
    provided, a new database directory will be created.  This directory
    contains all the state required by the application: BPKI CA, client
@@ -25,27 +28,46 @@ publication requests, for audit purposes or similar.
 
 ### Endpoints
 
- - `POST /bpki-init`: set up a local BPKI CA and EE certificate for
-   the proxy to use.  This must be run manually when the proxy is
-   being initialised.
- - `POST /bpki-cycle`: revoke the previous EE certificate, issue a new
-   one, and issue a new CRL.  This must be run periodically (at least
-   yearly, at the moment, after the initial call to `bpki-init`).
- - `GET /publisher`: get the publication request XML for this
-   publication proxy.  This should be passed to the publication point,
-   which will return repository response XML.
- - `POST /repository`: takes the repository response XML retrieved
-   from the publication point (provided as post data) and initialises
-   the proxy's internal state accordingly.
- - `POST /client`: takes publication request XML (provided as post
-   data) and returns repository response XML that child engines can
-   use for publication.  Those publication requests will be proxied to
-   the publication point that was configured via `POST /repository`.
+#### Administrative (internal)
 
-There is an additional publication endpoint, but unlike the endpoints
-above, there is no need to call the publication endpoint manually: the
-clients that use the proxy learn about the publication endpoint from
-the repository response XML returned by `POST /client`.
+ - `POST /admin/bpki-init`
+    - Takes no parameters.  Sets up a local BPKI CA and EE certificate
+      for the proxy to use.  This must be run manually when the proxy
+      is initialised: the proxy will respond with HTTP errors to all
+      other types of request until this has happened.
+
+ - `POST /admin/bpki-cycle`
+    - Takes no parameters.  Revokes the previous EE certificate,
+      issues a new one, and issues a new CRL.  This must be run
+      periodically (at least yearly, at the moment, after the initial
+      call to `/admin/bpki-init`).
+
+ - `GET /admin/publisher`
+    - Takes no parameters.  Returns the publication request XML
+      ([section 5.2.3 of RFC 8183](https://tools.ietf.org/html/rfc8183#section-5.2.3)) for this publication proxy.
+      This XML should be passed to the upstream publication point, which
+      will return repository response XML ([section 5.2.4 of RFC 8183](https://tools.ietf.org/html/rfc8183#section-5.2.4)).
+
+ - `POST /admin/repository`
+    - Takes as POST data the repository response XML ([section 5.2.4 of RFC 8183](https://tools.ietf.org/html/rfc8183#section-5.2.4))
+      retrieved from the publication point, and initialises the proxy's internal state accordingly.
+
+ - `POST /admin/client`
+    - Takes as POST data the publication request XML ([section 5.2.3 of RFC 8183](https://tools.ietf.org/html/rfc8183#section-5.2.3))
+      for a child engine, and returns the repository
+      response XML ([section 5.2.4 of RFC 8183](https://tools.ietf.org/html/rfc8183#section-5.2.4)) for that engine.
+      The `publisher_handle` must be unique per proxy instance: the
+      proxy will return an error message if the handle is already in
+      use.
+
+#### User (external)
+
+ - `POST /publication/{publisher_handle}`
+    - The endpoint used by a publication client to make publication
+      protocol ([RFC 8181](https://tools.ietf.org/html/rfc8181))
+      requests.  The URL for this endpoint is
+      included within the client-specific repository response XML (see
+      `POST /admin/client`).
 
 ### References
 
@@ -54,4 +76,4 @@ the repository response XML returned by `POST /client`.
 
 ### License
 
-See LICENSE.txt.
+See [LICENSE](./LICENSE).

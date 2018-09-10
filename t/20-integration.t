@@ -42,40 +42,50 @@ if (not $publication_pid) {
     $server->run();
 }
 
-my $host             = '127.0.0.1';
-my $proxy_base       = "http://$host:8080";
-my $publication_base = "http://$host:8081";
+sub exit_test
+{
+    kill 'TERM', $proxy_pid;
+    kill 'TERM', $publication_pid;
+    waitpid $proxy_pid, 0;
+    waitpid $publication_pid, 0;
+}
+
+my $host                   = '127.0.0.1';
+my $proxy_base             = "http://$host:8080";
+my $publication_base       = "http://$host:8081";
+my $proxy_base_admin       = "http://$host:8080/admin";
+my $publication_base_admin = "http://$host:8081/admin";
 
 {
     my $ua = LWP::UserAgent->new();
 
-    my $req = HTTP::Request->new(POST => "$proxy_base/bpki-init");
+    my $req = HTTP::Request->new(POST => "$proxy_base_admin/bpki-init");
     my $res = $ua->request($req);
     ok($res->is_success(), 'Created CA successfully');
 
-    $req = HTTP::Request->new(POST => "$proxy_base/bpki-cycle");
+    $req = HTTP::Request->new(POST => "$proxy_base_admin/bpki-cycle");
     $res = $ua->request($req);
     ok($res->is_success(), 'Created EE certificate successfully');
 
-    $req = HTTP::Request->new(GET => "$proxy_base/publisher");
+    $req = HTTP::Request->new(GET => "$proxy_base_admin/publisher");
     $res = $ua->request($req);
     ok($res->is_success(), 'Got publication request');
     my $pub_request = $res->content();
 
-    $req = HTTP::Request->new(POST => "$publication_base/ca");
+    $req = HTTP::Request->new(POST => "$publication_base_admin/ca");
     $res = $ua->request($req);
     ok($res->is_success(), 'Created publication CA successfully');
 
-    $req = HTTP::Request->new(POST => "$publication_base/ee");
+    $req = HTTP::Request->new(POST => "$publication_base_admin/ee");
     $res = $ua->request($req);
     ok($res->is_success(), 'Created publication EE certificate successfully');
 
-    $req = HTTP::Request->new(POST => "$publication_base/client",
+    $req = HTTP::Request->new(POST => "$publication_base_admin/client",
                               [], $pub_request);
     $res = $ua->request($req);
     ok($res->is_success(), 'Registered with publication server');
 
-    $req = HTTP::Request->new(POST => "$proxy_base/repository",
+    $req = HTTP::Request->new(POST => "$proxy_base_admin/repository",
                               [ 'Content-Type' => 'application/xml' ],
                               $res->content());
     $res = $ua->request($req);
@@ -105,7 +115,7 @@ my $publication_base = "http://$host:8081";
    </publisher_request>
 EOF
 
-    $req = HTTP::Request->new(POST => "$proxy_base/client",
+    $req = HTTP::Request->new(POST => "$proxy_base_admin/client",
                               [ 'Content-Type' => 'application/xml' ],
                               $client_request);
     $res = $ua->request($req);
@@ -139,8 +149,12 @@ EOF
                                     'application/rpki-publication' ],
                               $xml_list_query);
     $res = $ua->request($req);
-    is($res->code(), HTTP_BAD_REQUEST,
-        'Got "bad request" on invalid query');
+    is($res->code(), HTTP_OK,
+        'Got HTTP OK on invalid query (CMS-wrapped)');
+    my $xml_error_response =
+        $openssl->verify_cms($res->content(), $repo_ta);
+    like($xml_error_response, qr/error_code="bad_cms_signature"/,
+        'Got correct error code');
 
     my $cms_list_query = $ca->sign_cms($xml_list_query);
     $req = HTTP::Request->new(POST => "$proxy_base/publication/Bob",
@@ -170,8 +184,12 @@ EOF
                                     'application/rpki-publication' ],
                               $cms_publish_query);
     $res = $ua->request($req);
-    ok((not $res->is_success()),
-        'Unable to publish object outside of handle directory');
+    is($res->code(), HTTP_OK,
+        'Got HTTP OK on attempting to publish outside of handle directory');
+    $xml_error_response =
+        $openssl->verify_cms($res->content(), $repo_ta);
+    like($xml_error_response, qr/error_code="permission_failure"/,
+        'Got correct error code');
 
     $xml_publish_query = <<EOF;
    <msg
@@ -208,23 +226,18 @@ EOF
     like($xml_list_response, qr!<msg.*<list hash=".*?" uri="rsync://$host/rpki-pp/Bob/object.cer"/></msg>!,
         'Got correct list response');
 
-    $req = HTTP::Request->new(POST => "$proxy_base/shutdown");
-    $res = $ua->request($req);
-    ok($res->is_success(), 'Proxy server shut down successfully');
+    kill 'TERM', $proxy_pid;
+    kill 'TERM', $publication_pid;
+    waitpid $proxy_pid, 0;
+    waitpid $publication_pid, 0;
 
-    $req = HTTP::Request->new(POST => "$publication_base/shutdown");
-    $res = $ua->request($req);
-    ok($res->is_success(), 'Publication server shut down successfully');
-
+    exit_test();
     $shutdown = 0;
 }
 
 END {
     if ($shutdown) {
-        kill 'TERM', $proxy_pid;
-        kill 'TERM', $publication_pid;
-        waitpid $proxy_pid, 0;
-        waitpid $publication_pid, 0;
+        exit_test();
     }
     exit 0;
 }
