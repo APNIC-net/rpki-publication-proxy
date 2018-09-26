@@ -146,7 +146,7 @@ sub is_initialised
 
 sub initialise
 {
-    my ($self, $common_name) = @_;
+    my ($self, $common_name, $key_only) = @_;
 
     $self->_chdir_ca();
 
@@ -173,7 +173,62 @@ sub initialise
 
     my $openssl = $self->{'openssl'}->get_openssl_path();
     _system("$openssl genrsa -out ca/ca/private/ca.key 2048");
-    _system("$openssl req -new -x509 -key ca/ca/private/ca.key -out ca/ca.crt -subj '/CN=$common_name'");
+    if (not $key_only) {
+        _system("$openssl req -new -x509 -key ca/ca/private/ca.key -out ca/ca.crt -subj '/CN=$common_name'");
+    }
+
+    return 1;
+}
+
+sub get_ca_request
+{
+    my ($self, $common_name) = @_;
+
+    $self->_chdir_ca();
+
+    my $openssl = $self->{'openssl'}->get_openssl_path();
+    _system("$openssl req -new -key ca/ca/private/ca.key -out ca/ca.req -subj '/CN=$common_name'");
+
+    my $data = read_file('ca/ca.req');
+    return $data;
+}
+
+sub sign_ca_request
+{
+    my ($self, $request) = @_;
+
+    $self->_chdir_ca();
+
+    my $ft_request = File::Temp->new();
+    print $ft_request $request;
+    $ft_request->flush();
+    my $fn_request = $ft_request->filename();
+
+    my $ft_output = File::Temp->new();
+    my $fn_output = $ft_output->filename();
+
+    my $openssl = $self->{'openssl'}->get_openssl_path();
+    _system("$openssl ca -batch -config ca.cnf -extensions root_ca_ext ".
+            "-out $fn_output ".
+            "-in $fn_request -days 365");
+
+    my $data = read_file($fn_output);
+    return $data;
+}
+
+sub install_ca_certificate
+{
+    my ($self, $certificate) = @_;
+
+    $self->_chdir_ca();
+
+    my $ft_cert = File::Temp->new();
+    print $ft_cert $certificate;
+    $ft_cert->flush();
+    my $fn_cert = $ft_cert->filename();
+
+    my $openssl = $self->{'openssl'}->get_openssl_path();
+    _system("$openssl x509 -in $fn_cert -out ca/ca.crt");
 
     return 1;
 }
@@ -336,8 +391,26 @@ Returns a boolean indicating whether this CA has been initialised.
 
 =item B<initialise>
 
-Takes a certificate common name as its single argument.  Initialises a
-new CA using the C<ca_path> directory provided to the constructor.
+Takes a certificate common name and a flag indicating whether a
+self-signed certificate should not be generated.  Initialises a new CA
+using the C<ca_path> directory provided to the constructor.  If the
+second argument is true, then the caller must use the
+C<get_ca_request> and C<install_ca_certificate> methods to set up the
+CA.
+
+=item B<get_ca_request>
+
+Returns the certificate signing request for this CA.
+
+=item B<sign_ca_request>
+
+Signs a certificate signing request from a CA, returning the
+new certificate in PEM format.
+
+=item B<install_ca_certificate>
+
+Takes a CA certificate in PEM format, and installs that certificate as
+the CA certificate for this CA.
 
 =item B<revoke_current_ee_certificate>
 

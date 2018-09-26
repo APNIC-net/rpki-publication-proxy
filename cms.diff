@@ -1,22 +1,22 @@
---- prev/cms.c	2015-03-19 23:37:10.000000000 +1000
-+++ apps/cms.c	2018-07-10 22:21:45.278539473 +1000
-@@ -99,6 +99,7 @@
- int verify_err = 0;
+--- prev/cms.c	2018-08-14 22:48:56.000000000 +1000
++++ apps/cms.c	2018-09-25 10:59:03.207170134 +1000
+@@ -109,6 +109,7 @@
+ };
  
  int MAIN(int, char **);
-+static X509_CRL *load_crl(char *infile, int format);
++static X509_CRL *load_crl_for_cms(char *infile, int format);
  
  int MAIN(int argc, char **argv)
  {
-@@ -111,6 +112,7 @@
+@@ -119,6 +120,7 @@
+     const char *inmode = "r", *outmode = "w";
+     char *infile = NULL, *outfile = NULL, *rctfile = NULL;
      char *signerfile = NULL, *recipfile = NULL;
++    char *crlfile = NULL;
      STACK_OF(OPENSSL_STRING) *sksigners = NULL, *skkeys = NULL;
      char *certfile = NULL, *keyfile = NULL, *contfile = NULL;
-+    char *crlfile = NULL;
      char *certsoutfile = NULL;
-     const EVP_CIPHER *cipher = NULL;
-     CMS_ContentInfo *cms = NULL, *rcms = NULL;
-@@ -421,6 +423,10 @@
+@@ -483,6 +485,10 @@
              if (!args[1])
                  goto argerr;
              certfile = *++args;
@@ -27,20 +27,12 @@
          } else if (!strcmp(*args, "-CAfile")) {
              if (!args[1])
                  goto argerr;
-@@ -854,7 +860,6 @@
-          * format.
-          */
-         if (operation == SMIME_SIGN) {
--
-             if (flags & CMS_DETACHED) {
-                 if (outformat == FORMAT_SMIME)
-                     flags |= CMS_STREAM;
-@@ -874,6 +879,13 @@
+@@ -966,6 +972,13 @@
                      goto end;
                  }
              }
 +            if (crlfile) {
-+                X509_CRL *crl = load_crl(crlfile, FORMAT_PEM);
++                X509_CRL *crl = load_crl_for_cms(crlfile, FORMAT_PEM);
 +                if (!crl) {
 +                    exit(1);
 +                }
@@ -49,11 +41,11 @@
          } else
              flags |= CMS_REUSE_DIGEST;
          for (i = 0; i < sk_OPENSSL_STRING_num(sksigners); i++) {
-@@ -1218,4 +1230,42 @@
-     return NULL;
+@@ -1355,4 +1368,42 @@
+     return 1;
  }
  
-+static X509_CRL *load_crl(char *infile, int format)
++static X509_CRL *load_crl_for_cms(char *infile, int format)
 +{
 +    X509_CRL *x = NULL;
 +    BIO *in = NULL;

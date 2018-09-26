@@ -50,7 +50,7 @@ sub verify_cms
     my $fn_output = $ft_output->filename();
 
     my $openssl = $self->get_openssl_path();
-    system_ad("$openssl cms -verify -inform DER ".
+    system_ad("$openssl cms -verify -partial_chain -inform DER ".
               "-in $fn_input ".
               "-CAfile $fn_ca ".
               "-out $fn_output",
