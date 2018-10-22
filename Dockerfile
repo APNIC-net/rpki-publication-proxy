@@ -1,6 +1,9 @@
 FROM ubuntu:16.04
 
-ENV HOSTNAME asdf
+ENV HOSTNAME rpki-pp
+ENV PORT 8080
+ENV HANDLE rpki-pp
+ENV DBPATH /tmp/rpki-pp-db
 
 RUN apt-get update -y
 RUN apt-get install -y \
@@ -28,5 +31,5 @@ RUN wget https://ftp.openssl.org/source/openssl-1.0.2p.tar.gz \
 COPY . /root/rpki-publication-proxy
 RUN cd /root/rpki-publication-proxy/ && perl Makefile.PL && make && make test && make install
 RUN rm -rf /root/rpki-publication-proxy/
-CMD ["sh", "-c", "perl -MCarp::Always /usr/local/bin/rpki-publication-proxy-server $HOSTNAME $PORT $HANDLE $DBPATH"]
+CMD ["sh", "-c", "mkdir -p $DBPATH/ca && perl -MCarp::Always /usr/local/bin/rpki-publication-proxy-server $HOSTNAME $PORT $HANDLE $DBPATH"]
 

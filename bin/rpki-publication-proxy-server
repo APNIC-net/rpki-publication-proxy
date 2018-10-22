@@ -18,9 +18,9 @@ my $server =
         hostname => $ARGV[0],
         port     => $ARGV[1],
         handle   => $ARGV[2],
-        dbpath   => $ARGV[3],
+        db_path  => $ARGV[3],
     );
-print "Running on ".$server->{'hostname'}.':'.$server->{'port'}." (".$server->{'dbpath'}.")...\n";
+print STDERR "Running on ".$server->{'hostname'}.':'.$server->{'port'}." (".$server->{'dbpath'}.")...\n";
 $server->run();
 
 1;
